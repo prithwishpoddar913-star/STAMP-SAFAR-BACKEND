@@ -55,14 +55,6 @@ export function addStampToCart(stamp: Stamp) {
 }
 
 export async function addStampToCartForSignedInUser(stamp: Stamp) {
-  if (!supabase || !isSupabaseConfigured) return false;
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.user) return false;
-
   addStampToCart(stamp);
   return true;
 }

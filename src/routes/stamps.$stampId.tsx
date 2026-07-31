@@ -29,7 +29,7 @@ import { SiteLayout } from "@/components/SiteLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StampCard } from "@/components/StampCard";
-import { getStamp, stamps } from "@/lib/stamps";
+import { getStamp, stamps, useStampAvailability } from "@/lib/stamps";
 import { addStampToCartForSignedInUser } from "@/lib/cart";
 import { readWishlist, toggleWishlistInSupabase } from "@/lib/wishlist";
 
@@ -96,8 +96,10 @@ function StampDetail() {
   const { mode } = Route.useSearch();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const available = useStampAvailability(stamp.id);
+
   const [activePanel, setActivePanel] = useState<"buy" | "details">(
-    mode === "buy" ? "buy" : "details",
+    mode === "buy" && available ? "buy" : "details",
   );
   const [pincode, setPincode] = useState("");
   const [message, setMessage] = useState("");
@@ -126,9 +128,9 @@ function StampDetail() {
   });
 
   useEffect(() => {
-    setActivePanel(mode === "buy" ? "buy" : "details");
+    setActivePanel(mode === "buy" && available ? "buy" : "details");
     setWishlisted(readWishlist().includes(stamp.id));
-  }, [mode, stamp.id]);
+  }, [mode, stamp.id, available]);
 
   if (pathname === `/stamps/${stamp.id}/buy`) {
     return <Outlet />;
@@ -162,6 +164,7 @@ function StampDetail() {
   };
 
   const addToCart = async () => {
+    if (!available) return;
     const added = await addStampToCartForSignedInUser(stamp);
     if (!added) {
       navigate({ to: "/auth" });
@@ -209,31 +212,37 @@ function StampDetail() {
                 />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
-                <Button
-                  asChild
-                  size="lg"
-                  className="h-12 w-full gap-2 bg-gold text-gold-foreground hover:bg-gold/90"
-                  aria-disabled={!stamp.available}
-                >
-                  <a
-                    href={stamp.available ? `/stamps/${stamp.id}/buy#buy-section` : undefined}
-                    onClick={(event) => {
-                      if (!stamp.available) event.preventDefault();
-                    }}
+                {available ? (
+                  <Button
+                    asChild
+                    size="lg"
+                    className="h-12 w-full gap-2 bg-gold text-gold-foreground hover:bg-gold/90"
+                  >
+                    <a href={`/stamps/${stamp.id}/buy#buy-section`}>
+                      <ShoppingBag className="w-4 h-4" />
+                      Buy Now
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    disabled
+                    size="lg"
+                    className="h-12 w-full gap-2 bg-muted text-muted-foreground cursor-not-allowed"
                   >
                     <ShoppingBag className="w-4 h-4" />
-                    Buy Now
-                  </a>
-                </Button>
+                    Sold Out
+                  </Button>
+                )}
                 <Button
                   type="button"
                   size="lg"
                   variant="outline"
                   className="h-12 gap-2"
+                  disabled={!available}
                   onClick={addToCart}
                 >
                   <ShoppingCart className="w-4 h-4" />
-                  Add Cart
+                  {available ? "Add Cart" : "Unavailable"}
                 </Button>
               </div>
             </div>
@@ -246,7 +255,7 @@ function StampDetail() {
                   {stamp.category}
                 </Badge>
                 <Badge variant="outline">{stamp.year}</Badge>
-                {stamp.available ? (
+                {available ? (
                   <Badge className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100">
                     In stock
                   </Badge>
@@ -278,19 +287,22 @@ function StampDetail() {
 
             <div className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4 flex border-b border-border">
-                {(["buy", "details"] as const).map((panel) => (
-                  <button
-                    key={panel}
-                    onClick={() => setActivePanel(panel)}
-                    className={`px-4 py-3 text-sm font-medium capitalize ${
-                      activePanel === panel
-                        ? "border-b-2 border-primary text-foreground"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {panel === "details" ? "Details" : panel}
-                  </button>
-                ))}
+                {(["buy", "details"] as const).map((panel) => {
+                  if (panel === "buy" && !available) return null;
+                  return (
+                    <button
+                      key={panel}
+                      onClick={() => setActivePanel(panel)}
+                      className={`px-4 py-3 text-sm font-medium capitalize ${
+                        activePanel === panel
+                          ? "border-b-2 border-primary text-foreground"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {panel === "details" ? "Details" : panel}
+                    </button>
+                  );
+                })}
               </div>
 
               {message && (

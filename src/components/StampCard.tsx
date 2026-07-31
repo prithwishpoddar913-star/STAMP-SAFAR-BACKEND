@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import type { Stamp } from "@/lib/stamps";
+import { useStampAvailability } from "@/lib/stamps";
 import { addStampToCartForSignedInUser } from "@/lib/cart";
 import {
   readWishlist,
@@ -23,6 +24,7 @@ export function StampCard({
   stamp: Stamp;
 }) {
   const navigate = useNavigate();
+  const available = useStampAvailability(stamp.id);
 
   const [wishlisted, setWishlisted] =
     useState(false);
@@ -59,7 +61,7 @@ export function StampCard({
   }, [stamp.id]);
 
   const addToCart = async () => {
-    if (!stamp.available) return;
+    if (!available) return;
 
     const added =
       await addStampToCartForSignedInUser(
@@ -81,7 +83,7 @@ export function StampCard({
   return (
     <article
       className={`stamp-card group overflow-hidden ${
-        !stamp.available
+        !available
           ? "opacity-80"
           : ""
       }`}
@@ -106,13 +108,13 @@ export function StampCard({
               height={800}
               loading="lazy"
               className={`relative w-full h-full object-contain transition-transform duration-700 ease-out drop-shadow-md ${
-                stamp.available
+                available
                   ? "group-hover:scale-[1.07] group-hover:-rotate-1"
                   : "grayscale"
               }`}
             />
 
-            {!stamp.available && (
+            {!available && (
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                 <span className="bg-red-600 text-white text-xs px-3 py-1 rounded-full font-semibold">
                   SOLD OUT
@@ -199,12 +201,12 @@ export function StampCard({
 
           <span
             className={`text-xs ${
-              stamp.available
+              available
                 ? "text-emerald-600"
                 : "text-red-500 font-medium"
             }`}
           >
-            {stamp.available
+            {available
               ? "● Available"
               : "● Sold Out"}
           </span>
@@ -213,7 +215,7 @@ export function StampCard({
         {/* BUTTONS */}
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          {stamp.available ? (
+          {available ? (
             <a
               href={`/stamps/${stamp.id}/buy#buy-section`}
               className="inline-flex h-10 w-full items-center justify-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -234,16 +236,16 @@ export function StampCard({
           <button
             type="button"
             onClick={addToCart}
-            disabled={!stamp.available}
+            disabled={!available}
             className={`inline-flex h-10 w-full items-center justify-center gap-1 rounded-md px-3 text-xs font-medium transition-colors ${
-              stamp.available
+              available
                 ? "border border-border bg-card hover:border-gold hover:bg-gold/10"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             }`}
           >
             <ShoppingCart className="h-4 w-4" />
 
-            {stamp.available
+            {available
               ? "Add Cart"
               : "Unavailable"}
           </button>

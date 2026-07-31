@@ -9,16 +9,19 @@ import {
   Volume2,
   VolumeX,
   X,
+  ArrowRight,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { stamps } from "@/lib/stamps";
+import { Link } from "@tanstack/react-router";
+import { stamps, searchStampsInDatabase, Stamp } from "@/lib/stamps";
 
 type Lang = "en" | "hi" | "bn";
 
 interface ChatMessage {
   sender: "user" | "bot";
   text: string;
+  stamps?: Stamp[];
 }
 
 /* ================= LANGUAGE TEXT ================= */
@@ -148,37 +151,21 @@ function startVoiceRecognition(
 function generateStampAnswer(
   query: string,
   lang: Lang
-) {
-  const q = query.toLowerCase();
-
-  const matched = stamps.filter((s) => {
-    const searchable = `
-      ${s.name}
-      ${s.description}
-      ${s.category}
-      ${s.rarity}
-      ${s.city}
-      ${s.state}
-      ${s.year}
-    `
-      .toLowerCase()
-      .trim();
-
-    return q
-      .split(" ")
-      .some((word) =>
-        searchable.includes(word)
-      );
-  });
+): { text: string; stamps: Stamp[] } {
+  const matched = searchStampsInDatabase(query);
 
   if (matched.length === 0) {
-    return LANG_TEXT[lang].noResult;
+    return {
+      text: LANG_TEXT[lang].noResult,
+      stamps: [],
+    };
   }
 
   const top = matched.slice(0, 3);
 
+  let text = "";
   if (lang === "bn") {
-    return top
+    text = top
       .map(
         (s) => `
 🏷️ ${s.name}
@@ -198,10 +185,8 @@ ${s.description}
 `
       )
       .join("\n-------------------\n");
-  }
-
-  if (lang === "hi") {
-    return top
+  } else if (lang === "hi") {
+    text = top
       .map(
         (s) => `
 🏷️ ${s.name}
@@ -221,11 +206,10 @@ ${s.description}
 `
       )
       .join("\n-------------------\n");
-  }
-
-  return top
-    .map(
-      (s) => `
+  } else {
+    text = top
+      .map(
+        (s) => `
 🏷️ ${s.name}
 
 📅 Year: ${s.year}
@@ -241,8 +225,11 @@ ${s.description}
 🧠 History:
 ${s.description}
 `
-    )
-    .join("\n-------------------\n");
+      )
+      .join("\n-------------------\n");
+  }
+
+  return { text, stamps: top };
 }
 
 /* ================= MAIN COMPONENT ================= */
@@ -336,7 +323,7 @@ export function FloatingDakBot() {
     setLoading(true);
 
     setTimeout(() => {
-      const answer =
+      const result =
         generateStampAnswer(
           text,
           finalLang
@@ -346,12 +333,13 @@ export function FloatingDakBot() {
         ...prev,
         {
           sender: "bot",
-          text: answer,
+          text: result.text,
+          stamps: result.stamps,
         },
       ]);
 
       speakText(
-        answer,
+        result.text,
         finalLang,
         voiceOn
       );
@@ -476,10 +464,56 @@ export function FloatingDakBot() {
                     msg.sender ===
                     "user"
                       ? "ml-auto bg-yellow-500 text-black"
-                      : "bg-muted"
+                      : "bg-muted text-foreground"
                   }`}
                 >
-                  {msg.text}
+                  <div>{msg.text}</div>
+
+                  {msg.stamps && msg.stamps.length > 0 && (
+                    <div className="mt-3 space-y-2.5">
+                      {msg.stamps.map((stamp) => (
+                        <div
+                          key={stamp.id}
+                          className="bg-black/45 border border-white/10 rounded-lg p-2.5 flex gap-3 items-center text-white"
+                        >
+                          {stamp.image && (
+                            <img
+                              src={stamp.image}
+                              alt={stamp.name}
+                              className="h-12 w-12 rounded object-contain bg-white/5 p-0.5"
+                            />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-xs truncate">
+                              {stamp.name}
+                            </div>
+                            <div className="text-[10px] text-gray-300 mt-0.5">
+                              {stamp.year} · {stamp.rarity} · ₹{stamp.price}
+                            </div>
+                            <div className="flex items-center justify-between mt-1">
+                              <span
+                                className={`text-[9px] font-medium ${
+                                  stamp.available
+                                    ? "text-emerald-400"
+                                    : "text-rose-500"
+                                }`}
+                              >
+                                {stamp.available ? "● Available" : "● Sold Out"}
+                              </span>
+                              <Link
+                                to="/stamps/$stampId"
+                                params={{ stampId: stamp.id }}
+                                className="inline-flex items-center gap-0.5 bg-yellow-500 hover:bg-yellow-600 text-black text-[10px] font-bold px-2 py-1 rounded transition-colors"
+                              >
+                                View
+                                <ArrowRight className="w-2.5 h-2.5" />
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             )}

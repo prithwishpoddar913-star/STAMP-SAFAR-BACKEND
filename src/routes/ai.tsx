@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { SiteLayout } from "@/components/SiteLayout";
 import { StampCard } from "@/components/StampCard";
-import { stamps } from "@/lib/stamps";
+import { stamps, searchStampsInDatabase } from "@/lib/stamps";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -225,6 +225,7 @@ interface ChatMessage {
   text: string;
   imageUrl?: string;
   imageAlt?: string;
+  stamps?: Stamp[];
 }
 
 interface IdentifiedStamp {
@@ -838,21 +839,82 @@ function AIPage() {
     setChatLoading(true);
 
     try {
-      const res = await aiServiceFn({
-        data: {
-          prompt: userText,
-          language: chatLanguage,
-        },
-      });
+      // 1. Perform database lookup
+      const matches = searchStampsInDatabase(userText);
 
-      if (res.success && res.response) {
-        setChatMessages((prev) => [...prev, { sender: "bot", text: res.response }]);
-      } else {
+      if (matches.length > 0) {
+        const picks = matches
+          .map(
+            (stamp) =>
+              `- ${stamp.name} (${stamp.year}): ${stamp.rarity}, Price: ₹${stamp.price.toLocaleString("en-IN")}, Status: ${stamp.available ? "Available" : "Sold Out"}`
+          )
+          .join("\n");
+        const replyText = `I found the following matching stamps in our database:\n\n${picks}\n\nYou can view the full details below.`;
+
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
         setChatMessages((prev) => [
           ...prev,
           {
             sender: "bot",
-            text: "Apologies, I had trouble answering that. Could you ask in a different way?",
+            text: replyText,
+            stamps: matches,
+          },
+        ]);
+        setChatLoading(false);
+        return;
+      }
+
+      // 2. If no matches, check if it's a general/conversational question
+      const q = userText.toLowerCase();
+      const isGeneralQuestion = /care|store|clean|dawk|scinde|first stamp|first independent|how do i|how to/i.test(q);
+
+      if (isGeneralQuestion) {
+        const offlineReply = buildOfflineChatReply(userText, undefined, chatLanguage);
+        if (offlineReply && !offlineReply.includes("Aap stamp ka naam") && !offlineReply.includes("Tell me the stamp name")) {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          setChatMessages((prev) => [...prev, { sender: "bot", text: offlineReply }]);
+          setChatLoading(false);
+          return;
+        }
+
+        const res = await aiServiceFn({
+          data: {
+            prompt: userText,
+            language: chatLanguage,
+          },
+        });
+
+        if (res.success && res.response) {
+          // Clean default recommendations from response if not queried
+          let text = res.response;
+          const containsGandhi = q.includes("gandhi");
+          const containsNetaji = q.includes("netaji") || q.includes("subhas") || q.includes("bose");
+          if (
+            (!containsGandhi && (text.includes("Mahatma Gandhi") || text.includes("Gandhi Stamp"))) ||
+            (!containsNetaji && (text.includes("Netaji Subhas") || text.includes("Subhas Bose")))
+          ) {
+            if (/recommend|match|pick|best|suggest|catalog/i.test(text)) {
+              text = "No matching stamp found in the database.";
+            }
+          }
+          setChatMessages((prev) => [...prev, { sender: "bot", text: text }]);
+        } else {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              sender: "bot",
+              text: "Apologies, I had trouble answering that. Could you ask in a different way?",
+            },
+          ]);
+        }
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            sender: "bot",
+            text: "No matching stamp found in the database.",
           },
         ]);
       }
@@ -1192,6 +1254,68 @@ function AIPage() {
                       />
                     )}
                     <div>{m.text}</div>
+
+                    {m.stamps && m.stamps.length > 0 && (
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {m.stamps.map((stamp) => (
+                          <div
+                            key={stamp.id}
+                            className="overflow-hidden rounded-xl border border-white/10 bg-black/40 backdrop-blur-md p-3 flex flex-col gap-2 shadow-md hover:border-yellow-500/50 transition-all duration-300 group/card text-white"
+                          >
+                            {stamp.image && (
+                              <div className="relative aspect-[4/3] bg-white/5 rounded-lg overflow-hidden flex items-center justify-center p-2">
+                                <img
+                                  src={stamp.image}
+                                  alt={stamp.name}
+                                  className="max-h-24 object-contain transition-transform duration-500 group-hover/card:scale-105"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-sm truncate group-hover/card:text-yellow-400 transition-colors">
+                                {stamp.name}
+                              </h4>
+                              <p className="text-xs text-gray-300 mt-1 flex items-center gap-1.5 flex-wrap">
+                                <span>{stamp.year}</span>
+                                <span>·</span>
+                                <span>{stamp.category}</span>
+                                <span>·</span>
+                                <Badge className="bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 text-[9px] px-1.5 py-0 hover:bg-yellow-500/20">
+                                  {stamp.rarity}
+                                </Badge>
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                {stamp.description}
+                              </p>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-2.5">
+                              <span className="font-bold text-yellow-400 text-sm">
+                                ₹{stamp.price.toLocaleString("en-IN")}
+                              </span>
+                              <span
+                                className={`text-[11px] font-medium flex items-center gap-1 ${
+                                  stamp.available
+                                    ? "text-emerald-400"
+                                    : "text-rose-500"
+                                }`}
+                              >
+                                <span className={`h-1.5 w-1.5 rounded-full ${stamp.available ? "bg-emerald-400" : "bg-rose-500"}`} />
+                                {stamp.available ? "Available" : "Sold Out"}
+                              </span>
+                            </div>
+                            <Button
+                              onClick={() => navigate({ to: `/stamps/${stamp.id}` })}
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 w-full text-xs h-9 border-white/10 hover:bg-yellow-500 hover:text-black hover:border-yellow-500 transition-all duration-300 flex items-center justify-center gap-1.5 font-semibold"
+                            >
+                              View Stamp Details
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

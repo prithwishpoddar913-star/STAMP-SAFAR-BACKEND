@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { SiteLayout } from "@/components/SiteLayout";
-import { stamps } from "@/lib/stamps";
+import { stamps, useStampAvailability, type Stamp } from "@/lib/stamps";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -102,125 +102,111 @@ function Marketplace() {
 
         <div className="grid md:grid-cols-2 gap-5">
           {listings.map((s) => (
-            <article
-              key={s.id}
-              className="p-4 flex gap-4 group rounded-3xl border border-white/10 bg-black/40 backdrop-blur-md"
-            >
-              {/* IMAGE */}
-              <div className="w-28 sm:w-32 shrink-0 aspect-[4/5] bg-secondary/20 rounded-lg grid place-items-center p-2 relative">
-
-                {!s.available && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 rounded-lg">
-                    <span className="bg-red-600 text-white text-xs px-3 py-1 rounded-full font-semibold">
-                      SOLD OUT
-                    </span>
-                  </div>
-                )}
-
-                <img
-                  src={s.image}
-                  alt={s.name}
-                  className={`w-full h-full object-contain transition ${
-                    s.available
-                      ? "group-hover:scale-105"
-                      : "grayscale opacity-60"
-                  }`}
-                />
-              </div>
-
-              {/* INFO */}
-              <div className="flex-1 flex flex-col">
-                <div className="flex justify-between">
-                  <h3 className="text-white font-semibold">
-                    {s.name}
-                  </h3>
-
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] border-white/20 text-white"
-                  >
-                    {s.rarity}
-                  </Badge>
-                </div>
-
-                <p className="text-xs text-gray-300 mt-1">
-                  {s.year} · {s.category}
-                </p>
-
-                <div className="mt-auto pt-3 flex justify-between">
-                  <div>
-                    <div className="text-xs text-gray-200">
-                      {s.seller!.name}
-                    </div>
-
-                    <div className="flex gap-2 text-xs text-gray-400">
-                      <span className="flex items-center gap-1">
-                        <Star className="w-3 h-3 text-gold" />
-                        {s.seller!.rating}
-                      </span>
-
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {s.seller!.location}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="text-white font-semibold">
-                      ₹{s.price.toLocaleString("en-IN")}
-                    </div>
-
-                    <div
-                      className={`text-[10px] ${
-                        s.available
-                          ? "text-emerald-400"
-                          : "text-red-400"
-                      }`}
-                    >
-                      {s.available ? "● Available" : "● Sold Out"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* BUTTONS */}
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="outline"
-                    className="border-white/20 bg-black/20 text-white hover:bg-white/10"
-                  >
-                    <Link
-                      to="/stamps/$stampId"
-                      params={{ stampId: s.id }}
-                    >
-                      Details
-                    </Link>
-                  </Button>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!s.available}
-                    className={`gap-1 ${
-                      s.available
-                        ? "bg-gold text-black hover:bg-gold/90"
-                        : "bg-gray-600 text-gray-300 cursor-not-allowed"
-                    }`}
-                    onClick={() => {
-                      if (s.available) addToCart(s);
-                    }}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    {s.available ? "Add Cart" : "Sold Out"}
-                  </Button>
-                </div>
-              </div>
-            </article>
+            <MarketplaceCard key={s.id} s={s} addToCart={addToCart} />
           ))}
         </div>
       </section>
     </SiteLayout>
+  );
+}
+
+function MarketplaceCard({ s, addToCart }: { s: Stamp; addToCart: (s: Stamp) => void }) {
+  const available = useStampAvailability(s.id);
+
+  return (
+    <article
+      className="p-4 flex gap-4 group rounded-3xl border border-white/10 bg-black/40 backdrop-blur-md"
+    >
+      {/* IMAGE */}
+      <div className="w-28 sm:w-32 shrink-0 aspect-[4/5] bg-secondary/20 rounded-lg grid place-items-center p-2 relative">
+        {!available && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 rounded-lg">
+            <span className="bg-red-600 text-white text-xs px-3 py-1 rounded-full font-semibold">
+              SOLD OUT
+            </span>
+          </div>
+        )}
+
+        <img
+          src={s.image}
+          alt={s.name}
+          className={`w-full h-full object-contain transition ${
+            available ? "group-hover:scale-105" : "grayscale opacity-60"
+          }`}
+        />
+      </div>
+
+      {/* INFO */}
+      <div className="flex-1 flex flex-col">
+        <div className="flex justify-between">
+          <h3 className="text-white font-semibold">{s.name}</h3>
+
+          <Badge variant="outline" className="text-[10px] border-white/20 text-white">
+            {s.rarity}
+          </Badge>
+        </div>
+
+        <p className="text-xs text-gray-300 mt-1">
+          {s.year} · {s.category}
+        </p>
+
+        <div className="mt-auto pt-3 flex justify-between">
+          <div>
+            <div className="text-xs text-gray-200">{s.seller!.name}</div>
+
+            <div className="flex gap-2 text-xs text-gray-400">
+              <span className="flex items-center gap-1">
+                <Star className="w-3 h-3 text-gold" />
+                {s.seller!.rating}
+              </span>
+
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {s.seller!.location}
+              </span>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="text-white font-semibold">₹{s.price.toLocaleString("en-IN")}</div>
+
+            <div className={`text-[10px] ${available ? "text-emerald-400" : "text-red-400"}`}>
+              {available ? "● Available" : "● Sold Out"}
+            </div>
+          </div>
+        </div>
+
+        {/* BUTTONS */}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="border-white/20 bg-black/20 text-white hover:bg-white/10"
+          >
+            <Link to="/stamps/$stampId" params={{ stampId: s.id }}>
+              Details
+            </Link>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            disabled={!available}
+            className={`gap-1 ${
+              available
+                ? "bg-gold text-black hover:bg-gold/90"
+                : "bg-gray-600 text-gray-300 cursor-not-allowed"
+            }`}
+            onClick={() => {
+              if (available) addToCart(s);
+            }}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            {available ? "Add Cart" : "Sold Out"}
+          </Button>
+        </div>
+      </div>
+    </article>
   );
 }

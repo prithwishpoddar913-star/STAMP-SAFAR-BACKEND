@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+
 const stampImages = Array.from(
   { length: 160 },
   (_, i) => `/stamps/stamp${i + 1}.jpeg`
@@ -1361,4 +1363,137 @@ export type Stamp = (typeof stamps)[number];
 
 export function getStamp(id: string) {
   return stamps.find((stamp) => stamp.id === id);
+}
+
+export function isStampAvailable(stampId: string): boolean {
+  const baseStamp = stamps.find((s) => s.id === stampId);
+  if (!baseStamp) return false;
+  if (!baseStamp.available) return false;
+
+  if (typeof window === "undefined") return baseStamp.available;
+  try {
+    const ordersJson = window.localStorage.getItem("stampSafar.orders");
+    if (ordersJson) {
+      const orders = JSON.parse(ordersJson);
+      const hasActiveOrder = orders.some(
+        (o: any) =>
+          o.stampId === stampId &&
+          o.status !== "Cancelled" &&
+          o.status !== "Returned" &&
+          o.status !== "Failed"
+      );
+      if (hasActiveOrder) {
+        return false;
+      }
+    }
+  } catch (e) {
+    console.error("Error reading orders from localStorage:", e);
+  }
+
+  return true;
+}
+
+export function useStampAvailability(stampId: string): boolean {
+  const [available, setAvailable] = useState(() => isStampAvailable(stampId));
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setAvailable(isStampAvailable(stampId));
+    };
+
+    window.addEventListener("stampSafar:orders-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    handleUpdate();
+
+    return () => {
+      window.removeEventListener("stampSafar:orders-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, [stampId]);
+
+  return available;
+}
+
+export function searchStampsInDatabase(query: string): Stamp[] {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+
+  // Stop words to ignore during keyword matching (common conversational or non-specific terms)
+  const stopWords = new Set([
+    "show", "me", "find", "search", "the", "a", "an", "is", "are", "of", "in", "for", "to", "and", "or",
+    "stamp", "stamps", "please", "about", "with", "on", "at", "by", "from", "get", "view"
+  ]);
+
+  const isFuzzyMatch = (str: string, target: string) => {
+    let targetIdx = 0;
+    for (let char of str) {
+      if (char === target[targetIdx]) {
+        targetIdx++;
+      }
+      if (targetIdx === target.length) return true;
+    }
+    return false;
+  };
+
+  const results = stamps.map((stamp) => {
+    let score = 0;
+
+    const nameNormalized = stamp.name.toLowerCase();
+    const cleanName = nameNormalized.replace(/\s*stamp\s*\d*/gi, "").trim();
+
+    // 1. Exact Match on name (ignoring the word "stamp" and trailing numbers)
+    if (cleanName === q || nameNormalized === q) {
+      score += 100;
+    }
+    // 2. Partial / Substring Match on name
+    else if (nameNormalized.includes(q) || q.includes(cleanName)) {
+      score += 60;
+    }
+
+    // 3. Keyword Match
+    const queryWords = q.split(/\s+/).filter(w => w.length > 1 && !stopWords.has(w));
+    let matchedKeywords = 0;
+    const fieldsToSearch = [
+      stamp.name,
+      stamp.description,
+      stamp.category,
+      stamp.rarity,
+      stamp.city,
+      stamp.state,
+      stamp.origin,
+      stamp.year.toString()
+    ].map(f => f.toLowerCase());
+
+    for (const word of queryWords) {
+      let wordMatched = false;
+      for (const field of fieldsToSearch) {
+        if (field.includes(word)) {
+          score += field === nameNormalized ? 15 : 5;
+          wordMatched = true;
+        }
+      }
+      if (wordMatched) matchedKeywords++;
+    }
+
+    // 4. Fuzzy Search (Levenshtein-like or character sequence match)
+    if (score === 0) {
+      // Check fuzzy matching on name
+      if (isFuzzyMatch(nameNormalized, q) || isFuzzyMatch(q, cleanName)) {
+        score += 20;
+      }
+      // Check year match within query
+      const yearInQuery = q.match(/\b(19\d{2}|20\d{2}|18\d{2})\b/);
+      if (yearInQuery && stamp.year === parseInt(yearInQuery[0])) {
+        score += 30;
+      }
+    }
+
+    return { stamp, score };
+  });
+
+  return results
+    .filter(r => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(r => r.stamp);
 }
